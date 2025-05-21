@@ -77,64 +77,39 @@ def main(params):
     gaze_detector.to(device)
     gaze_detector.eval()
 
-    video_source = params.source
-    if video_source.isdigit() or video_source == '0':
-        cap = cv2.VideoCapture(int(video_source))
-    else:
-        cap = cv2.VideoCapture(video_source)
-
-    if params.output:
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        out = cv2.VideoWriter(params.output, fourcc, cap.get(cv2.CAP_PROP_FPS), (width, height))
-
-    if not cap.isOpened():
-        raise IOError("Cannot open webcam")
+    if params.source.lower().endswith(('.jpg', '.jpeg', '.png')):
+        image = cv2.imread(params.source)
+        if image is None:
+            raise IOError(f"Could not load image: {params.source}")
 
     with torch.no_grad():
-        while True:
-            success, frame = cap.read()
+        bboxes, keypoints = face_detector.detect(image)
+        for bbox, keypoint in zip(bboxes, keypoints):
+            x_min, y_min, x_max, y_max = map(int, bbox[:4])
 
-            if not success:
-                logging.info("Failed to obtain frame or EOF")
-                break
+            face = image[y_min:y_max, x_min:x_max]
+            face = pre_process(face)
+            face = face.to(device)
 
-            bboxes, keypoints = face_detector.detect(frame)
-            for bbox, keypoint in zip(bboxes, keypoints):
-                x_min, y_min, x_max, y_max = map(int, bbox[:4])
+            pitch, yaw = gaze_detector(face)
+            print(F.softmax(pitch, dim=1).cpu().numpy())
+            pitch_predicted, yaw_predicted = F.softmax(pitch, dim=1), F.softmax(yaw, dim=1)
+            
+            # Mapping from binned (0 to 90) to angles (-180 to 180) or (0 to 28) to angles (-42, 42)
+            pitch_predicted = torch.sum(pitch_predicted * idx_tensor, dim=1) * params.binwidth - params.angle
+            yaw_predicted = torch.sum(yaw_predicted * idx_tensor, dim=1) * params.binwidth - params.angle
 
-                image = frame[y_min:y_max, x_min:x_max]
-                image = pre_process(image)
-                image = image.to(device)
+            # Degrees to Radians
+            pitch_predicted = np.radians(pitch_predicted.cpu())
+            yaw_predicted = np.radians(yaw_predicted.cpu())
 
-                pitch, yaw = gaze_detector(image)
-
-                pitch_predicted, yaw_predicted = F.softmax(pitch, dim=1), F.softmax(yaw, dim=1)
-
-                # Mapping from binned (0 to 90) to angles (-180 to 180) or (0 to 28) to angles (-42, 42)
-                pitch_predicted = torch.sum(pitch_predicted * idx_tensor, dim=1) * params.binwidth - params.angle
-                yaw_predicted = torch.sum(yaw_predicted * idx_tensor, dim=1) * params.binwidth - params.angle
-
-                # Degrees to Radians
-                pitch_predicted = np.radians(pitch_predicted.cpu())
-                yaw_predicted = np.radians(yaw_predicted.cpu())
-
-                # draw box and gaze direction
-                draw_bbox_gaze(frame, bbox, pitch_predicted, yaw_predicted)
-
+            # draw box and gaze direction
+            print(pitch_predicted)
+            print(yaw_predicted)
+            draw_bbox_gaze(image, bbox, pitch_predicted, yaw_predicted)
+            
             if params.output:
-                out.write(frame)
-
-            if params.view:
-                cv2.imshow('Demo', frame)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-
-    cap.release()
-    if params.output:
-        out.release()
-    cv2.destroyAllWindows()
+                cv2.imwrite(params.output, image)
 
 
 if __name__ == "__main__":
