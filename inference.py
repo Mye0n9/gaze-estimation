@@ -92,6 +92,9 @@ def main(params):
             face = face.to(device)
 
             pitch, yaw = gaze_detector(face)
+            # pitch: 상하의 움직임 (끄덕임)
+            # yaw: 좌우의 움직임 (도리도리)
+            # roll: 각도의 움직임 (갸우뚱)
             print(F.softmax(pitch, dim=1).cpu().numpy())
             pitch_predicted, yaw_predicted = F.softmax(pitch, dim=1), F.softmax(yaw, dim=1)
             
