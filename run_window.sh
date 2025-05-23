@@ -1,0 +1,1 @@
+python inference.py --model resnet50 --weight /weights/resnet50.pt --view --source ../real_test/study.jpg --output result1.jpg
