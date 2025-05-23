@@ -3,6 +3,8 @@ import logging
 import argparse
 import warnings
 import numpy as np
+import random
+import os
 
 import torch
 import torch.nn.functional as F
@@ -16,6 +18,17 @@ import uniface
 warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 
+
+def seed_everything(seed):
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+seed_everything(42) # Seed 고정
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Gaze estimation inference")
